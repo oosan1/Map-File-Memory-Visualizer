@@ -1,0 +1,734 @@
+<!doctype html>
+<html lang="ja">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Map File Memory Visualizer</title>
+        <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+        <style>
+            body {
+                margin: 0;
+                font-family:
+                    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                    Helvetica, Arial, sans-serif;
+                display: flex;
+                flex-direction: column;
+                height: 100vh;
+                background-color: #f4f6f8;
+                color: #333;
+            }
+            header {
+                background-color: #ffffff;
+                padding: 12px 24px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: space-between;
+                align-items: center;
+                gap: 12px;
+                z-index: 10;
+            }
+            header h1 {
+                margin: 0;
+                font-size: 1.4rem;
+                color: #2c3e50;
+            }
+            .controls {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                flex-wrap: wrap;
+            }
+            .filter-group {
+                display: flex;
+                gap: 4px;
+                background: #eee;
+                padding: 4px;
+                border-radius: 6px;
+            }
+            .filter-btn {
+                border: none;
+                background: none;
+                padding: 6px 12px;
+                cursor: pointer;
+                font-size: 0.9rem;
+                border-radius: 4px;
+                color: #555;
+                font-weight: 500;
+                transition: all 0.2s;
+            }
+            .filter-btn:hover {
+                background: #e0e0e0;
+            }
+            .filter-btn.active {
+                background: #fff;
+                color: #2196f3;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            }
+
+            #searchInput {
+                padding: 6px 12px;
+                font-size: 0.95rem;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                width: 200px;
+                transition: border-color 0.2s;
+            }
+            #searchInput:focus {
+                outline: none;
+                border-color: #4caf50;
+            }
+            #searchInput:disabled {
+                background: #f5f5f5;
+                cursor: not-allowed;
+            }
+            input[type="file"] {
+                font-size: 0.9rem;
+                padding: 4px;
+                cursor: pointer;
+            }
+
+            /* メモリ情報のダッシュボード */
+            .memory-dashboard {
+                display: none;
+                gap: 16px;
+                padding: 12px 24px;
+                background: #fff;
+                border-bottom: 1px solid #e0e0e0;
+                overflow-x: auto;
+            }
+            .memory-card {
+                flex: 1;
+                min-width: 220px;
+                background: #f8f9fa;
+                border: 1px solid #e0e0e0;
+                border-radius: 6px;
+                padding: 10px 14px;
+                cursor: pointer;
+                transition:
+                    border-color 0.2s,
+                    background-color 0.2s;
+            }
+            .memory-card:hover {
+                background-color: #f0f7ff;
+                border-color: #2196f3;
+            }
+            .memory-card.active {
+                background-color: #e3f2fd;
+                border-color: #2196f3;
+                box-shadow: 0 0 0 1px #2196f3;
+            }
+            .memory-title {
+                font-weight: bold;
+                font-size: 0.95rem;
+                margin-bottom: 8px;
+                color: #333;
+                display: flex;
+                justify-content: space-between;
+            }
+            .memory-bar {
+                height: 10px;
+                background: #e0e0e0;
+                border-radius: 5px;
+                overflow: hidden;
+                margin-bottom: 8px;
+            }
+            .memory-fill {
+                height: 100%;
+                transition: width 0.5s ease;
+            }
+            .memory-stats {
+                font-size: 0.85rem;
+                color: #555;
+                display: flex;
+                justify-content: space-between;
+            }
+
+            main {
+                flex: 1;
+                padding: 16px 24px;
+                box-sizing: border-box;
+                overflow: hidden;
+            }
+            #chart-container {
+                width: 100%;
+                height: 100%;
+                background-color: #fff;
+                border-radius: 8px;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+                padding: 8px;
+                box-sizing: border-box;
+                position: relative;
+            }
+            #chart {
+                width: 100%;
+                height: 100%;
+            }
+            .chart-title-overlay {
+                position: absolute;
+                top: 16px;
+                left: 16px;
+                font-size: 1.1rem;
+                font-weight: bold;
+                color: #555;
+                background: rgba(255, 255, 255, 0.8);
+                padding: 4px 8px;
+                border-radius: 4px;
+                pointer-events: none;
+                z-index: 5;
+            }
+            .instruction {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                height: 100%;
+                color: #888;
+                font-size: 1.2rem;
+            }
+        </style>
+    </head>
+    <body>
+        <header>
+            <h1>Map File Memory Visualizer</h1>
+            <div class="controls">
+                <!-- フィルタボタン用コンテナ -->
+                <div
+                    id="filter-container"
+                    class="filter-group"
+                    style="display: none"
+                >
+                    <!-- JSでボタンを生成 -->
+                </div>
+
+                <input
+                    type="text"
+                    id="searchInput"
+                    placeholder="🔍 関数名・変数名で検索..."
+                    disabled
+                />
+                <input type="file" id="fileInput" accept=".map, .txt" />
+            </div>
+        </header>
+
+        <div class="memory-dashboard" id="memory-dashboard"></div>
+
+        <main>
+            <div id="chart-container">
+                <div
+                    id="chart-title"
+                    class="chart-title-overlay"
+                    style="display: none"
+                >
+                    All Regions
+                </div>
+                <div id="chart">
+                    <div class="instruction">
+                        右上のボタンから .map ファイルを選択してください
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <script>
+            let myChart = null;
+            // 生データをリストとして保持（ツリー構築前）
+            let allMapEntries = [];
+            let currentMemoryRegions = [];
+            let activeRegionFilter = "ALL"; // ALL, RAM, FLASH, etc.
+
+            // ウィンドウリサイズ時にチャートもリサイズ
+            window.addEventListener("resize", () => {
+                if (myChart) myChart.resize();
+            });
+
+            // ファイル読み込み処理
+            document
+                .getElementById("fileInput")
+                .addEventListener("change", function (e) {
+                    const file = e.target.files[0];
+                    if (!file) return;
+
+                    const reader = new FileReader();
+                    reader.onload = function (evt) {
+                        const content = evt.target.result;
+                        parseMapFile(content);
+
+                        // 検索ボックスを有効化
+                        const searchInput =
+                            document.getElementById("searchInput");
+                        searchInput.disabled = false;
+                        searchInput.value = "";
+
+                        // UI更新
+                        updateFilterButtons();
+                        renderMemoryDashboard();
+
+                        // 初期描画
+                        updateChart();
+                    };
+                    reader.readAsText(file);
+                });
+
+            // 検索ボックスのイベントリスナー
+            document
+                .getElementById("searchInput")
+                .addEventListener("input", function (e) {
+                    updateChart();
+                });
+
+            // チャートとデータの更新を一括管理
+            function updateChart() {
+                if (allMapEntries.length === 0) return;
+
+                const keyword = document
+                    .getElementById("searchInput")
+                    .value.trim();
+                const chartData = buildTreeData(activeRegionFilter, keyword);
+
+                // タイトル更新
+                const titleEl = document.getElementById("chart-title");
+                titleEl.style.display = "block";
+                titleEl.textContent =
+                    activeRegionFilter === "ALL"
+                        ? "All Memory Regions"
+                        : `Region: ${activeRegionFilter}`;
+
+                // 検索時は全展開(null)、通常時はファイル単位まで(2)
+                const isSearching = keyword.length > 0;
+                renderChart(chartData, isSearching);
+            }
+
+            // フィルタボタンの生成
+            function updateFilterButtons() {
+                const container = document.getElementById("filter-container");
+                container.innerHTML = "";
+                container.style.display = "flex";
+
+                // "All" ボタン
+                const allBtn = document.createElement("button");
+                allBtn.className =
+                    "filter-btn" +
+                    (activeRegionFilter === "ALL" ? " active" : "");
+                allBtn.textContent = "All";
+                allBtn.onclick = () => {
+                    setFilter("ALL");
+                };
+                container.appendChild(allBtn);
+
+                // 各メモリ領域のボタン
+                currentMemoryRegions.forEach((reg) => {
+                    const btn = document.createElement("button");
+                    btn.className =
+                        "filter-btn" +
+                        (activeRegionFilter === reg.name ? " active" : "");
+                    btn.textContent = reg.name;
+                    btn.onclick = () => {
+                        setFilter(reg.name);
+                    };
+                    container.appendChild(btn);
+                });
+            }
+
+            function setFilter(regionName) {
+                activeRegionFilter = regionName;
+
+                // ボタンの見た目更新
+                const btns = document.querySelectorAll(".filter-btn");
+                btns.forEach((btn) => {
+                    if (btn.textContent === regionName)
+                        btn.classList.add("active");
+                    else btn.classList.remove("active");
+                });
+
+                // ダッシュボードのカードの見た目更新
+                const cards = document.querySelectorAll(".memory-card");
+                cards.forEach((card) => {
+                    const title = card
+                        .querySelector(".memory-title")
+                        .textContent.split(" ")[0]; // タイトルから名前抽出
+                    if (regionName === "ALL" || title === regionName) {
+                        card.style.opacity = "1";
+                        if (title === regionName) card.classList.add("active");
+                        else card.classList.remove("active");
+                    } else {
+                        card.style.opacity = "0.5";
+                        card.classList.remove("active");
+                    }
+                });
+
+                updateChart();
+            }
+
+            // ファイルサイズのフォーマット
+            function formatBytes(bytes) {
+                if (bytes === 0) return "0 Bytes";
+                const k = 1024;
+                const sizes = ["Bytes", "KB", "MB"];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return (
+                    parseFloat((bytes / Math.pow(k, i)).toFixed(2)) +
+                    " " +
+                    sizes[i]
+                );
+            }
+
+            // mapファイルの解析処理
+            function parseMapFile(content) {
+                const lines = content.split("\n");
+                let isMap = false;
+                let parsingMemoryConfig = false;
+                let pendingSection = null;
+
+                // 初期化
+                allMapEntries = [];
+                currentMemoryRegions = [];
+                activeRegionFilter = "ALL";
+
+                for (let i = 0; i < lines.length; i++) {
+                    let line = lines[i].replace(/\r/g, "");
+
+                    // 「Memory Configuration」セクション
+                    if (line.includes("Memory Configuration")) {
+                        parsingMemoryConfig = true;
+                        continue;
+                    }
+                    if (line.includes("Linker script and memory map")) {
+                        parsingMemoryConfig = false;
+                        isMap = true;
+                        continue;
+                    }
+
+                    // メモリ領域情報の取得
+                    if (parsingMemoryConfig) {
+                        let memMatch = line.match(
+                            /^([A-Za-z0-9_]+)\s+(0x[0-9a-fA-F]+)\s+(0x[0-9a-fA-F]+)\s+[A-Za-z*]*$/,
+                        );
+                        if (memMatch) {
+                            let name = memMatch[1];
+                            let origin = parseInt(memMatch[2], 16);
+                            let length = parseInt(memMatch[3], 16);
+                            if (name !== "*default*" && length > 0) {
+                                currentMemoryRegions.push({
+                                    name,
+                                    origin,
+                                    length,
+                                    used: 0,
+                                });
+                            }
+                        }
+                        continue;
+                    }
+
+                    if (!isMap) continue;
+
+                    if (line.trim() === "") {
+                        pendingSection = null;
+                        continue;
+                    }
+
+                    // 1行パターン
+                    let match1 = line.match(
+                        /^\s+(\.[a-zA-Z0-9_.\-]+)\s+(0x[0-9a-fA-F]+)\s+(0x[0-9a-fA-F]+)\s+(.+)$/,
+                    );
+                    if (match1) {
+                        processEntry(
+                            match1[1],
+                            match1[2],
+                            match1[3],
+                            match1[4],
+                        );
+                        pendingSection = null;
+                        continue;
+                    }
+
+                    // 2行パターン(1行目)
+                    let match2 = line.match(/^\s+(\.[a-zA-Z0-9_.\-]+)$/);
+                    if (match2) {
+                        pendingSection = match2[1];
+                        continue;
+                    }
+
+                    // 2行パターン(2行目)
+                    if (pendingSection) {
+                        let match3 = line.match(
+                            /^\s+(0x[0-9a-fA-F]+)\s+(0x[0-9a-fA-F]+)\s+(.+)$/,
+                        );
+                        if (match3) {
+                            processEntry(
+                                pendingSection,
+                                match3[1],
+                                match3[2],
+                                match3[3],
+                            );
+                            pendingSection = null;
+                            continue;
+                        }
+                    }
+
+                    if (!line.match(/^\s+(0x[0-9a-fA-F]+)/)) {
+                        pendingSection = null;
+                    }
+                }
+            }
+
+            // エントリを解析してリストに追加
+            function processEntry(secName, addrHex, sizeHex, filePath) {
+                let size = parseInt(sizeHex, 16);
+                let addr = parseInt(addrHex, 16);
+                if (size === 0) return;
+
+                // 領域判定
+                let regionName = "Unknown";
+                let region = currentMemoryRegions.find(
+                    (r) => addr >= r.origin && addr < r.origin + r.length,
+                );
+                if (region) {
+                    region.used += size;
+                    regionName = region.name;
+                }
+
+                // カテゴリ分類
+                let category = "Other";
+                if (
+                    secName.startsWith(".text") ||
+                    secName.startsWith(".time_critical") ||
+                    secName.startsWith(".vectors") ||
+                    secName.startsWith(".boot2") ||
+                    secName.startsWith(".init") ||
+                    secName.startsWith(".fini")
+                ) {
+                    category = "Code (.text)";
+                } else if (secName.startsWith(".rodata")) {
+                    category = "Read Only Data (.rodata)";
+                } else if (secName.startsWith(".data")) {
+                    category = "Initialized Data (.data)";
+                } else if (
+                    secName.startsWith(".bss") ||
+                    secName.startsWith(".sbss")
+                ) {
+                    category = "Uninitialized Data (.bss)";
+                } else if (
+                    secName.startsWith(".stack") ||
+                    secName.startsWith(".heap")
+                ) {
+                    category = "Stack/Heap";
+                } else {
+                    // デバッグ情報などは除外
+                    return;
+                }
+
+                // ファイル名抽出
+                let fileName = filePath
+                    .split(/[\/\\]/)
+                    .pop()
+                    .trim();
+                if (!fileName) fileName = filePath.trim();
+
+                // 関数名抽出
+                let funcName = "<misc>";
+                let parts = secName.split(".");
+                if (parts.length >= 3) {
+                    // .text.funcName のような形式を想定
+                    funcName = parts.slice(2).join(".");
+                } else if (
+                    secName === ".text" ||
+                    secName === ".data" ||
+                    secName === ".bss"
+                ) {
+                    // セクション名そのものの場合はファイル名やシンボル名が取れないことが多いが
+                    // filePath内にシンボル情報がある場合もあるためそのまま使う
+                    funcName = secName;
+                }
+
+                allMapEntries.push({
+                    regionName,
+                    category,
+                    fileName,
+                    funcName,
+                    size,
+                });
+            }
+
+            // フラットなリストからツリー構造を構築する
+            function buildTreeData(targetRegion, keyword) {
+                const dataMap = {};
+                keyword = keyword.toLowerCase();
+
+                allMapEntries.forEach((entry) => {
+                    // 領域フィルタ
+                    if (
+                        targetRegion !== "ALL" &&
+                        entry.regionName !== targetRegion
+                    ) {
+                        return;
+                    }
+
+                    // キーワードフィルタ
+                    if (keyword) {
+                        const hit =
+                            entry.category.toLowerCase().includes(keyword) ||
+                            entry.fileName.toLowerCase().includes(keyword) ||
+                            entry.funcName.toLowerCase().includes(keyword);
+                        if (!hit) return;
+                    }
+
+                    // ツリー構築: カテゴリ -> ファイル -> 関数
+                    if (!dataMap[entry.category]) dataMap[entry.category] = {};
+                    if (!dataMap[entry.category][entry.fileName])
+                        dataMap[entry.category][entry.fileName] = {};
+                    if (
+                        !dataMap[entry.category][entry.fileName][entry.funcName]
+                    )
+                        dataMap[entry.category][entry.fileName][
+                            entry.funcName
+                        ] = 0;
+
+                    dataMap[entry.category][entry.fileName][entry.funcName] +=
+                        entry.size;
+                });
+
+                // ECharts形式に変換
+                const chartData = [];
+                for (let cat in dataMap) {
+                    let catNode = { name: cat, children: [] };
+                    for (let file in dataMap[cat]) {
+                        let fileNode = { name: file, children: [] };
+                        for (let func in dataMap[cat][file]) {
+                            fileNode.children.push({
+                                name: func,
+                                value: dataMap[cat][file][func],
+                            });
+                        }
+                        catNode.children.push(fileNode);
+                    }
+                    chartData.push(catNode);
+                }
+                return chartData;
+            }
+
+            // ダッシュボード（メモリ全体の空き容量）の描画
+            function renderMemoryDashboard() {
+                const dash = document.getElementById("memory-dashboard");
+                dash.innerHTML = "";
+
+                if (currentMemoryRegions.length === 0) {
+                    dash.style.display = "none";
+                    return;
+                }
+
+                dash.style.display = "flex";
+                currentMemoryRegions.forEach((reg) => {
+                    let percent =
+                        reg.length > 0
+                            ? Math.min(100, (reg.used / reg.length) * 100)
+                            : 0;
+                    let free = reg.length - reg.used;
+
+                    // 割合による色分け
+                    let color = "#4caf50";
+                    if (percent > 90) color = "#f44336";
+                    else if (percent > 75) color = "#ff9800";
+
+                    const card = document.createElement("div");
+                    card.className = "memory-card";
+                    // クリックでフィルタ切り替え
+                    card.onclick = () => setFilter(reg.name);
+
+                    card.innerHTML = `
+                    <div class="memory-title">
+                        ${reg.name}
+                        <span style="font-weight:normal;color:#777;font-size:0.8rem;">(0x${reg.origin.toString(16).toUpperCase()})</span>
+                    </div>
+                    <div class="memory-bar">
+                        <div class="memory-fill" style="width: ${percent}%; background-color: ${color};"></div>
+                    </div>
+                    <div class="memory-stats">
+                        <span style="font-weight:bold;">Used: ${formatBytes(reg.used)}</span>
+                        <span style="color:#007bff; font-weight:bold;">Free: ${formatBytes(free)}</span>
+                    </div>
+                    <div style="font-size:0.75rem; text-align:right; color:#888; margin-top:4px;">
+                        Total: ${formatBytes(reg.length)}
+                    </div>
+                `;
+                    dash.appendChild(card);
+                });
+            }
+
+            // チャートの描画
+            function renderChart(chartData, isSearchMode) {
+                const chartDom = document.getElementById("chart");
+
+                if (!myChart) {
+                    chartDom.innerHTML = "";
+                    myChart = echarts.init(chartDom);
+
+                    // クリックでドリルダウン無効化・有効化など調整が必要ならここ
+                }
+
+                const option = {
+                    tooltip: {
+                        formatter: function (info) {
+                            var value = info.value;
+                            var treePathInfo = info.treePathInfo;
+                            var treePath = [];
+                            for (var i = 1; i < treePathInfo.length; i++) {
+                                treePath.push(treePathInfo[i].name);
+                            }
+                            return (
+                                '<div style="font-weight:bold;margin-bottom:5px;">' +
+                                treePath.join(" <br>➔ ") +
+                                "</div>" +
+                                '<span style="font-size:1.1em; color:#0055ff;">Size: ' +
+                                value +
+                                " bytes (" +
+                                formatBytes(value) +
+                                ")</span>"
+                            );
+                        },
+                    },
+                    series: [
+                        {
+                            type: "treemap",
+                            data: chartData,
+                            leafDepth: isSearchMode ? null : 2,
+                            roam: false, // ズーム操作などが不要ならfalse
+                            breadcrumb: {
+                                show: true,
+                                height: 30,
+                                bottom: 10,
+                                itemStyle: {
+                                    textStyle: { lineHeight: 15 }, // パンくずリストの調整
+                                },
+                            },
+                            label: {
+                                show: true,
+                                formatter: "{b}\n{c} bytes",
+                            },
+                            itemStyle: {
+                                borderColor: "#fff",
+                            },
+                            levels: [
+                                {
+                                    itemStyle: {
+                                        borderWidth: 4,
+                                        borderColor: "#333",
+                                        gapWidth: 3,
+                                    },
+                                },
+                                {
+                                    itemStyle: { borderWidth: 2, gapWidth: 2 },
+                                },
+                                {
+                                    colorSaturation: [0.35, 0.6],
+                                    itemStyle: { borderWidth: 1, gapWidth: 1 },
+                                },
+                            ],
+                        },
+                    ],
+                };
+
+                myChart.setOption(option, { notMerge: true });
+            }
+        </script>
+    </body>
+</html>
